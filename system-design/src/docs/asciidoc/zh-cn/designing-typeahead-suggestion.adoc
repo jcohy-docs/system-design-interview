@@ -166,64 +166,62 @@ Each parent node will merge results from all of its children to figure out its t
 虽然我们的索引可以很容易地放在一台服务器上，但我们仍然可以对它进行分区，以满足我们对更高效率和更低延迟的要求。
 我们如何有效地对数据进行分区以将其分发到多个服务器上？
 
-Although our index can easily fit on one server, we can still partition it in order to meet our requirements of higher efficiency
-and lower latencies. How can we efficiently partition our data to distribute it onto multiple servers?
+a. *基于范围的分区：* 加入我们根据短语的第一个字母将短语存储在单独的分区中怎么办？
+因此，我们将所有以字母“A”开头的短语保存在一个分区中，并将以字母“B”开头的短语保存到另一个分区中，依此类推。
+我们甚至可以将某些不太频繁出现的短语保存到同一一个数据库分区中。
+使用这种静态分区方案，以便我们始终可以存储并以可预测的方式搜索术语。
++
+这种方法的主要问题是它可能导致服务器不平衡，例如，如果我们决定将所有以字母“E”开头的短语放入一个数据库分区，但后来我们意识到以字母“E”开头的短语太多，无法保存到一个数据库分区。
++
+可以看到，上述问题将发生在每个静态定义的方案中。
+无法计算每个分区是否适合成为一台静态服务器。
 
-a. *Range Based Partitioning:* What if we store our phrases in separate partitions based on their first letter.
-So we save all the terms starting with the letter ‘A’ in one partition and those that start with the letter ‘B’ into another partition and so on.
-We can even combine certain less frequently occurring letters into one database partition.
-We should come up with this partitioning scheme statically so that we can always store and search terms in a predictable manner.
+b. *基于服务器最大容量的分区：* 假设我们根据服务器的最大内存容量尝试进行分区。
+只要有可用的内存，就可以继续将数据存储在此服务器上。
+每当子树无法放入服务器时，我们就会在此分割分区以将该范围的字符分配给该服务器，并在下一台服务器上存储后续的字符串子树，以重复此过程。
+假设第一个尝试的服务器是可以存储从“A”到“AABC”的所有短语，这意味着在下一个服务器将从“AABD”开始存储。
+如果第二台服务器最多可以存储到“BXA”，那么下一台服务器将从“BXB”开始存储，依此类推。
+在这种分区方案中，可以保留一个哈希表来快速查询：+
+服务器 1，A-AABC +
+服务器 2，AABD-BXA +
+服务器 3， BXB-CDA +
+对于查询，如果用户键入了“A”，必须同时查询服务器 1 和 2 以找到最佳建议。
+当用户键入“AA”时，仍然需要查询服务器 1 和 2，但是当用户键入“AAA”时，只需要查询服务器 1。
 +
-The main problem with this approach is that it can lead to unbalanced servers, for instance, if we decide to put all terms starting with the letter ‘E’ into a DB partition, but later we realize that we have too many terms that start with letter ‘E’ that we can’t fit into one DB partition.
+可以在尝试服务器前面加一个负载均衡器，它可以存储此映射关系和重定向流量。
+此外，如果我们从多个服务器进行查询，要么需要在服务器端合并结果以计算最终的最佳结果，要么让在客户端合并结果计算最佳结果。
+如果更喜欢在服务器端执行此操作，我们需要在负载均衡器和尝试服务器之间引入另一层服务器（称之为聚合器）。
+这些服务器将聚合来自多个尝试服务器的结果，并将排名靠前的结果返回给客户端。
 +
-We can see that the above problem will happen with every statically defined scheme.
-It is not possible to calculate if each of our partitions will fit on one server statically.
+基于最大容量的分区仍会带来热点问题，例如，如果对以“cap”开头的术语有很多查询，则与其他服务器相比，将具有高负载。
 
-b. *Partition based on the maximum capacity of the server:* Let’s say we partition our trie based on the maximum memory capacity of the servers.
-We can keep storing data on a server as long as it has memory available.
-Whenever a sub-tree cannot fit into a server, we break our partition there to assign that range to this server and move on the next server to repeat this process.
-Let’s say if our first trie server can store all terms from ‘A’ to ‘AABC’, which mean our next server will store from ‘AABD’ onwards.
-If our second server could store up to ‘BXA’, the next server will start from ‘BXB’, and so on.
-We can keep a hash table to quickly access this partitioning scheme: +
-Server 1, A-AABC +
-Server 2, AABD-BXA +
-Server 3, BXB-CDA +
-For querying, if the user has typed ‘A’ we have to query both server 1 and 2 to find the top suggestions.
-When the user has typed ‘AA’, we still have to query server 1 and 2, but when the user has typed ‘AAA’ we only need to query server 1.
-+
-We can have a load balancer in front of our trie servers which can store this mapping and redirect traffic.
-Also, if we are querying from multiple servers, either we need to merge the results at the server side to calculate overall top results or make our clients do that.
-If we prefer to do this on the server side, we need to introduce another layer of servers between load balancers and trie severs (let’s call them aggregator).
-These servers will aggregate results from multiple trie servers and return the top results to the client.
-+
-Partitioning based on the maximum capacity can still lead us to hotspots, e.g., if there are a lot of queries for terms starting with ‘cap’, the server holding it will have a high load compared to others.
-
-c. *Partition based on the hash of the term:* Each term will be passed to a hash function, which will generate a server number and we will store the term on that server.
-This will make our term distribution random and hence minimize hotspots.
-To find typeahead suggestions for a term we have to ask all the servers and then aggregate the results.
+c. *基于术语哈希值的分区：* 每个术语都将使用哈希函数生成一个服务器编号，然后将术语存储在该服务器上。
+这将使术语随机分布，从而最大限度地减少热点问题。
+要找到一个术语的预建议结果，必须查询所有服务器，然后汇总结果。
 
 [[cache]]
-=== 7. Cache
+=== 7. 缓存
 
-We should realize that caching the top searched terms will be extremely helpful in our service.
-There will be a small percentage of queries that will be responsible for most of the traffic.
-We can have separate cache servers in front of the trie servers holding most frequently searched terms and their typeahead suggestions.
-Application servers should check these cache servers before hitting the trie servers to see if they have the desired searched terms.
+我们应该意识到，缓存搜索最多的词对。服务非常有帮助。
+将有一小部分查询产生大部分的流量。
+我们可以在尝试服务器前面部署单独的缓存服务器，其中包含最常搜索的术语及其预置建议。
+应用程序服务器应该在访问尝试服务器之前，在这些缓存服务器上查询是否具有所需的搜索词。
 
-We can also build a simple Machine Learning (ML) model that can try to predict the engagement on each suggestion based on simple counting, personalization, or trending data etc., and cache these terms.
+还可以构建一个简单的机器学习（ML）模型，该模型可以尝试根据简单的计数、个性化或趋势数据等来预测每个建议的搜索次数，并缓存这些术语。
+
 
 [[replication_and_load_balancer]]
-=== 8. Replication and Load Balancer
+=== 8. 备份和负载均衡器
 
-We should have replicas for our trie servers both for load balancing and also for fault tolerance.
-We also need a load balancer that keeps track of our data partitioning scheme and redirects traffic based on the prefixes.
+应该为尝试服务器提供副本，以实现负载平衡和容错。
+还需要一个负载均衡器来跟踪我们的数据分区方案并根据前缀重定向流量。
 
 [[fault_tolerance]]
-=== 9. Fault Tolerance
+=== 9. 容错
 
-What will happen when a trie server goes down?
-As discussed above we can have a master-slave configuration; if the master dies, the slave can take over after failover.
-Any server that comes back up, can rebuild the trie based on the last snapshot.
+当尝试服务器出现故障时会发生什么？
+如上所述，可以有一个主从配置；如果主设备死亡，则从设备可以在故障转移后接管主设备。
+任何恢复的服务器都可以根据上次快照重建尝试服务器。
 
 [[typeahead_client]]
 === 10. Typeahead Client
