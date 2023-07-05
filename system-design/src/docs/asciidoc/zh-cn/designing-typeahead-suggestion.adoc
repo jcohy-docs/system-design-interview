@@ -226,24 +226,21 @@ c. *基于术语哈希值的分区：* 每个术语都将使用哈希函数生�
 [[typeahead_client]]
 === 10. Typeahead Client
 
-We can perform the following optimizations on the client to improve user’s experience:
+我们可以在客户端进行以下优化，以提升用户体验：
 
-1. The client should only try hitting the server if the user has not pressed any key for 50ms.
-
-2. If the user is constantly typing, the client can cancel the in-progress requests.
-3. Initially, the client can wait until the user enters a couple of characters.
-4. Clients can pre-fetch some data from the server to save future requests.
-5. Clients can store the recent history of suggestions locally.
-Recent history has a very high rate of being reused.
-6. Establishing an early connection with the server turns out to be one of the most important factors.
-As soon as the user opens the search engine website, the client can open a connection with the server.
-So when a user types in the first character, the client doesn’t waste time in establishing the connection.
-7. The server can push some part of their cache to CDNs and Internet Service Providers (ISPs) for efficiency.
+1. 如果用户在50毫秒内未做任何操作，客户端应仅尝试访问服务器。
+2. 如果用户不断打字，客户端应取消正在进行的请求。
+3. 最初，客户端可以等待户输入几个字符之后开始向服务器发起请求。
+4. 客户端可以从服务器预取一些数据以保存未来的请求。
+5. 客户端可以在本地存储最近建议的历史记录。最近的历史记录有很高的概率被重新使用。
+6. 尽早与服务器建立连接是最重要的因素之一。一旦用户打开搜索引擎网站，客户端就可以打开与服务器的连接。
+因此，当用户输入第一个字符时，客户端不会浪费时间来建立连接。
+7. 服务器可以将其缓存的某些部分数据推送到 CDN 和互联网服务提供商 (ISP) 以提高效率。
 
 [[personalization]]
-=== 11. Personalization
+=== 11. 个性化
 
-Users will receive some typeahead suggestions based on their historical searches, location, language, etc.
-We can store the personal history of each user separately on the server and cache them on the client too.
-The server can add these personalized terms in the final set before sending it to the user.
-Personalized searches should always come before others.
+用户将根据其历史搜索、位置、语言等收到一些预置建议。
+可以将每个用户的个人历史记录分别存储在服务器上，也可以将它们缓存在客户端上。
+服务器可以在将这些个性化术语添加到最终集合中，然后发送给用户。
+个性化搜索应始终排在其他因素之前。
